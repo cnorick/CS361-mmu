@@ -4,10 +4,13 @@
  * 13 Dec 2016                            *
  ******************************************/
 #include "mmu.h"
+#include "unitTests.h"
 #include <stdio.h>
 
 int main()
 {
+    runTests();
+
 	CPU *cpu;
 
 	//1 << 18 is about 262,000 bytes
