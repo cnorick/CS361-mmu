@@ -1,8 +1,15 @@
-//Put your project groups' member's name here!
-//My Group Name
-//John A. Student
-//Jane B. Student
+// Large, Special Boys
+//    Kane Penley
+//    Nathan Orick
+
+
 #include "mmu.h"
+
+int pagingIsEnabled(CPU *cpu);
+ADDRESS getBaseAddress(ADDRESS);
+int isPresent(ADDRESS cur);
+int get7thBit(unsigned long te);
+
 
 //Write:
 // virt_to_phys
@@ -19,14 +26,45 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
 
 	//Only translate the pages if the MMU is on!!! Otherwise
 	//return virt as the physical address!
-	return virt;
+    if(!pagingIsEnabled(cpu))
+        return virt;
 
 	//Implement the logic to walk the page tables to convert
 	//the virt address into a physical one.
-
-
 	//If the page entry doesn't exist (present = 0), then
 	//return RET_PAGE_FAULT to signal a page fault
+    
+    // We get the pml4 address from the cr3, and it's offset from the virtual address.
+    ADDRESS pml4 = getBaseAddress(cpu->cr3) + ((virt >> 39) & 0x1fful);
+    unsigned long pml4e = cpu->memory[pml4]; //pml4 entry
+    if(!isPresent(pml4e))
+        return RET_PAGE_FAULT;
+
+    // Get pdp from pml4e. If it's entry's 7th bit is 0, go straight to physical page (These are 1Gb pages).
+    // If it's 7th bit is 0, it's either 4Kb or 2Mb. Keep going.
+    ADDRESS pdp = getBaseAddress(pml4e) + ((virt >> 30) & 0x1fful);
+    unsigned long pdpe = cpu->memory[pdp];
+    if(!isPresent(pdpe))
+        return RET_PAGE_FAULT;
+    if(get7thBit(pdpe) == 0)
+        return getBaseAddress(pdpe) + (virt & 0x3ffffffful); // 30 1's.
+
+    // Get pd from pdpe. If it's entry's 7th bit is 0, go straight to physical page (These are 2Mb pages).
+    // If it's 7th bit is 0, it's either 4Kb. Keep going.
+    ADDRESS pd = getBaseAddress(pdpe) + ((virt >> 21) & 0x1fful);
+    unsigned long pde = cpu->memory[pd];
+    if(!isPresent(pde))
+        return RET_PAGE_FAULT;
+    if(get7thBit(pde) == 0)
+        return getBaseAddress(pde) + (virt & 0x1ffffful); // 21 1's.
+
+    // Get pt from pde. These are 4Kb tables. Go straight to physical page from here.
+    // We don't have to check the 7th bit.
+    ADDRESS pt = getBaseAddress(pde) + ((virt >> 12) & 0x1fful);
+    unsigned long pte = cpu->memory[pt];
+    if(!isPresent(pte))
+        return RET_PAGE_FAULT;
+    return getBaseAddress(pte) + (virt & 0xffful); // 12 1's.
 }
 
 void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
@@ -152,3 +190,31 @@ void print_tlb(CPU *cpu)
 }
 
 #endif
+
+
+
+/********************
+ * Helper Functions *
+ *******************/
+
+
+// Returns 1 if paging is enabled, 0 otherwise.
+int pagingIsEnabled(CPU *cpu) {
+    return (cpu->cr0 >> 31) & 1;
+}
+
+// Gets the base address of the next table given the table entry te.
+ADDRESS getBaseAddress(unsigned long te) {
+    // Has to be a ul literal, else the casting causes some crazy shit.
+    return (te & 0x000ffffffffff000ul); // 10 f's. 
+}
+
+// Returns 1 if the present bit (0) is set at the table entry te, and 0 otherwise.
+int isPresent(unsigned long te) {
+    return te & 1ul;
+}
+
+// Returns the 7th bit of the table entry te. Remember that the bits are 0-based.
+int get7thBit(unsigned long te) {
+    return (te >> 7) & 0x1ul;
+}
