@@ -37,15 +37,19 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     // We get the pml4 address from the cr3, and it's offset from the virtual address.
     ADDRESS pml4 = getBaseAddress(cpu->cr3) + ((virt >> 39) & 0x1fful);
     unsigned long pml4e = cpu->memory[pml4]; //pml4 entry
-    if(!isPresent(pml4e))
+    if(!isPresent(pml4e)) {
+        cpu->cr2 = virt;
         return RET_PAGE_FAULT;
+    }
 
     // Get pdp from pml4e. If it's entry's 7th bit is 0, go straight to physical page (These are 1Gb pages).
     // If it's 7th bit is 0, it's either 4Kb or 2Mb. Keep going.
     ADDRESS pdp = getBaseAddress(pml4e) + ((virt >> 30) & 0x1fful);
     unsigned long pdpe = cpu->memory[pdp];
-    if(!isPresent(pdpe))
+    if(!isPresent(pdpe)) {
+        cpu->cr2 = virt;
         return RET_PAGE_FAULT;
+    }
     if(get7thBit(pdpe) == 0)
         return getBaseAddress(pdpe) + (virt & 0x3ffffffful); // 30 1's.
 
@@ -53,8 +57,10 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
     ADDRESS pd = getBaseAddress(pdpe) + ((virt >> 21) & 0x1fful);
     unsigned long pde = cpu->memory[pd];
-    if(!isPresent(pde))
+    if(!isPresent(pde)) {
+        cpu->cr2 = virt;
         return RET_PAGE_FAULT;
+    }
     if(get7thBit(pde) == 0)
         return getBaseAddress(pde) + (virt & 0x1ffffful); // 21 1's.
 
@@ -62,8 +68,10 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     // We don't have to check the 7th bit.
     ADDRESS pt = getBaseAddress(pde) + ((virt >> 12) & 0x1fful);
     unsigned long pte = cpu->memory[pt];
-    if(!isPresent(pte))
+    if(!isPresent(pte)) {
+        cpu->cr2 = virt;
         return RET_PAGE_FAULT;
+    }
     return getBaseAddress(pte) + (virt & 0xffful); // 12 1's.
 }
 
