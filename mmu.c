@@ -12,7 +12,7 @@ int get7thBit(unsigned long te);
 #define PHYS_MASK	(0xffful)
 #define ENTRY_MASK	(0x1fful)
 #define GB_MASK		(0x3ffffffful)
-#define MB_MASK		(0x2fffful)
+#define MB_MASK		(0x1ffffful) //2fffful -Marz
 
 void StartNewPageTable(CPU *cpu)
 {
@@ -42,36 +42,36 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
 	}
 
     // We get the pml4 address from the cr3, and it's offset from the virtual address.
-    ADDRESS pml4 = getBaseAddress(cpu->cr3) + ((virt >> 39) & ENTRY_MASK);
-    unsigned long pml4e = *(unsigned long*)&cpu->memory[pml4]; //pml4 entry
+    ADDRESS *pml4 = (ADDRESS*)(getBaseAddress(cpu->cr3));
+    ADDRESS pml4e = *(pml4 + ((virt >> 39) & ENTRY_MASK)); // Pointer arithmetic.
     if(!isPresent(pml4e))
         return RET_PAGE_FAULT;
 
     // Get pdp from pml4e. If it's entry's 7th bit is 0, go straight to physical page (These are 1Gb pages).
     // If it's 7th bit is 0, it's either 4Kb or 2Mb. Keep going.
-    ADDRESS pdp = getBaseAddress(pml4e) + ((virt >> 30) & ENTRY_MASK);
-    unsigned long pdpe = *(unsigned long*)&cpu->memory[pdp];
+    ADDRESS *pdp = (ADDRESS*)(getBaseAddress(pml4e));
+    ADDRESS pdpe = *(pdp + ((virt >> 30) & ENTRY_MASK));
     if(!isPresent(pdpe))
         return RET_PAGE_FAULT;
     if(get7thBit(pdpe) == 0)
-        return *(ADDRESS*)&cpu->memory[getBaseAddress(pdpe) + (virt & GB_MASK)];
+        return *(((ADDRESS*)getBaseAddress(pdpe)) + (virt & GB_MASK));
 
     // Get pd from pdpe. If it's entry's 7th bit is 0, go straight to physical page (These are 2Mb pages).
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
-    ADDRESS pd = getBaseAddress(pdpe) + ((virt >> 21) & ENTRY_MASK);
-    unsigned long pde = *(unsigned long*)&cpu->memory[pd];
+    ADDRESS *pd = (ADDRESS*)getBaseAddress(pdpe);
+    ADDRESS pde = *(pd + ((virt >> 21) & ENTRY_MASK));
     if(!isPresent(pde))
         return RET_PAGE_FAULT;
     if(get7thBit(pde) == 0)
-        return *(ADDRESS*)&cpu->memory[getBaseAddress(pde) + (virt & 0x1ffffful)];
+        return *(((ADDRESS*)getBaseAddress(pde)) + (virt & MB_MASK));
 
     // Get pt from pde. These are 4Kb tables. Go straight to physical page from here.
     // We don't have to check the 7th bit.
-    ADDRESS pt = getBaseAddress(pde) + ((virt >> 12) & ENTRY_MASK);
-    unsigned long pte = *(unsigned long*)&cpu->memory[pt];
+    ADDRESS *pt = (ADDRESS*)getBaseAddress(pde);
+    ADDRESS pte = *(pt + ((virt >> 12) & ENTRY_MASK));
     if(!isPresent(pte))
         return RET_PAGE_FAULT;
-    return *(ADDRESS*)&cpu->memory[getBaseAddress(pte) + (virt & PHYS_MASK)];
+    return *(((ADDRESS*)getBaseAddress(pte)) + (virt & PHYS_MASK));
 }
 
 void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
@@ -90,6 +90,8 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
 		//Nothing has been created, so start here
 		StartNewPageTable(cpu);
 	}
+
+
 /*
 	ADDRESS pml4e = (virt >> 39) & ENTRY_MASK;
 	ADDRESS pdpe = (virt >> 30) & ENTRY_MASK;
