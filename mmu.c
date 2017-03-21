@@ -2,14 +2,26 @@
 //    Kane Penley
 //    Nathan Orick
 
-
 #include "mmu.h"
 
-int pagingIsEnabled(CPU *cpu);
 ADDRESS getBaseAddress(ADDRESS);
 int isPresent(ADDRESS cur);
 int get7thBit(unsigned long te);
 
+#define NULL_ADDRESS	(0ul)
+#define PHYS_MASK	(0xffful)
+#define ENTRY_MASK	(0x1fful)
+#define GB_MASK		(0x3ffffffful)
+#define MB_MASK		(0x1ffffful) //2fffful -Marz
+
+void StartNewPageTable(CPU *cpu)
+{
+	//Create cr3 all the way!
+
+	//Take memory 1/2 up:
+	ADDRESS p = (ADDRESS)&cpu->memory[cpu->mem_size / 2];
+	cpu->cr3 = p + 0x1000 - (p & 0xfff);
+}
 
 //Write:
 // virt_to_phys
@@ -17,67 +29,56 @@ int get7thBit(unsigned long te);
 // unmap
 ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
 {
-	//If you did the extra credit, your TLB
-	//logic goes here. Also, uncomment the I_DID_EXTRA_CREDIT
-	//define inside of mmu.h
-	//Make sure that you consult your TLB before you walk the
-	//pages. That's the whole point!
+	//Convert a physical address *virt* to
+	//a physical address.
 
+	//If the MMU is off, simply return the virtual address as
+	//the physical address
+	if (!(cpu->cr0 & (1 << 31))) {
+		return virt;
+	}
+	if (cpu->cr3 == 0) {
+		return RET_PAGE_FAULT;
+	}
 
-	//Only translate the pages if the MMU is on!!! Otherwise
-	//return virt as the physical address!
-    if(!pagingIsEnabled(cpu))
-        return virt;
-
-	//Implement the logic to walk the page tables to convert
-	//the virt address into a physical one.
-	//If the page entry doesn't exist (present = 0), then
-	//return RET_PAGE_FAULT to signal a page fault
-    
     // We get the pml4 address from the cr3, and it's offset from the virtual address.
-    ADDRESS pml4 = getBaseAddress(cpu->cr3) + ((virt >> 39) & 0x1fful);
-    unsigned long pml4e = cpu->memory[pml4]; //pml4 entry
-    if(!isPresent(pml4e)) {
-        cpu->cr2 = virt;
+    ADDRESS *pml4 = (ADDRESS*)(getBaseAddress(cpu->cr3));
+    ADDRESS pml4e = *(pml4 + ((virt >> 39) & ENTRY_MASK)); // Pointer arithmetic.
+    if(!isPresent(pml4e))
         return RET_PAGE_FAULT;
-    }
 
     // Get pdp from pml4e. If it's entry's 7th bit is 0, go straight to physical page (These are 1Gb pages).
     // If it's 7th bit is 0, it's either 4Kb or 2Mb. Keep going.
-    ADDRESS pdp = getBaseAddress(pml4e) + ((virt >> 30) & 0x1fful);
-    unsigned long pdpe = cpu->memory[pdp];
-    if(!isPresent(pdpe)) {
-        cpu->cr2 = virt;
-        return RET_PAGE_FAULT;
-    }
+    ADDRESS *pdp = (ADDRESS*)(getBaseAddress(pml4e));
+    ADDRESS pdpe = *(pdp + ((virt >> 30) & ENTRY_MASK));
     if(get7thBit(pdpe) == 0)
-        return getBaseAddress(pdpe) + (virt & 0x3ffffffful); // 30 1's.
+        return *(((ADDRESS*)getBaseAddress(pdpe)) + (virt & GB_MASK));
+    if(!isPresent(pdpe))
+        return RET_PAGE_FAULT;
 
     // Get pd from pdpe. If it's entry's 7th bit is 0, go straight to physical page (These are 2Mb pages).
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
-    ADDRESS pd = getBaseAddress(pdpe) + ((virt >> 21) & 0x1fful);
-    unsigned long pde = cpu->memory[pd];
-    if(!isPresent(pde)) {
-        cpu->cr2 = virt;
-        return RET_PAGE_FAULT;
-    }
+    ADDRESS *pd = (ADDRESS*)getBaseAddress(pdpe);
+    ADDRESS pde = *(pd + ((virt >> 21) & ENTRY_MASK));
     if(get7thBit(pde) == 0)
-        return getBaseAddress(pde) + (virt & 0x1ffffful); // 21 1's.
+        return *(((ADDRESS*)getBaseAddress(pde)) + (virt & MB_MASK));
+    if(!isPresent(pde))
+        return RET_PAGE_FAULT;
 
     // Get pt from pde. These are 4Kb tables. Go straight to physical page from here.
     // We don't have to check the 7th bit.
-    ADDRESS pt = getBaseAddress(pde) + ((virt >> 12) & 0x1fful);
-    unsigned long pte = cpu->memory[pt];
-    if(!isPresent(pte)) {
-        cpu->cr2 = virt;
+    ADDRESS *pt = (ADDRESS*)getBaseAddress(pde);
+    ADDRESS pte = *(pt + ((virt >> 12) & ENTRY_MASK));
+    if(!isPresent(pte))
         return RET_PAGE_FAULT;
-    }
-    return getBaseAddress(pte) + (virt & 0xffful); // 12 1's.
+    return *(((ADDRESS*)getBaseAddress(pte)) + (virt & PHYS_MASK));
 }
 
 void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
 {
 	//ALL PAGE MAPS must be located in cpu->memory!!
+
+	//This function will return the PML4 of the mapped address
 
 	//If the page size is 1G, you need a valid PML4 and PDP
 	//If the page size is 2M, you need a valid PML4, PDP, and PD
@@ -85,6 +86,24 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
 	//Remember that I could have some 2M pages and some 4K pages with a smattering
 	//of 1G pages!
 
+	if (cpu->cr3 == 0) {
+		//Nothing has been created, so start here
+		StartNewPageTable(cpu);
+	}
+
+
+/*
+	ADDRESS pml4e = (virt >> 39) & ENTRY_MASK;
+	ADDRESS pdpe = (virt >> 30) & ENTRY_MASK;
+	ADDRESS pde = (virt >> 21) & ENTRY_MASK;
+	ADDRESS pte = (virt >> 12) & ENTRY_MASK;
+	ADDRESS p = virt & PHYS_MASK;
+
+	ADDRESS *pml4 = (ADDRESS *)cpu->cr3;
+	ADDRESS *pdp;
+	ADDRESS *pd;
+	ADDRESS *pt;
+*/
 }
 
 void unmap(CPU *cpu, ADDRESS virt, PAGE_SIZE ps)
@@ -93,24 +112,13 @@ void unmap(CPU *cpu, ADDRESS virt, PAGE_SIZE ps)
 	//If the page size is 1G, set the present bit of the PDP to 0
 	//If the page size is 2M, set the present bit of the PD  to 0
 	//If the page size is 4K, set the present bit of the PT  to 0
-	//To avoid eating a lot of memory, when you map a new page that
-	//doesn't already have an entry, use a table that has P = 0.
+
+
+	if (cpu->cr3 == 0)
+		return;
 
 }
 
-//////////////////////////////////////////
-//
-//Write your extra credit function invlpg
-//below
-//
-//////////////////////////////////////////
-
-#if defined(I_DID_EXTRA_CREDIT)
-void invlpg(CPU *cpu, ADDRESS virt)
-{
-
-}
-#endif
 
 
 //////////////////////////////////////////
@@ -129,12 +137,12 @@ CPU *new_cpu(unsigned int mem_size)
 	CPU *ret;
 
 
-	ret = calloc(1, sizeof(CPU));
-	ret->memory = calloc(mem_size, sizeof(char));
+	ret = (CPU*)calloc(1, sizeof(CPU));
+	ret->memory = (char*)calloc(mem_size, sizeof(char));
 	ret->mem_size = mem_size;
 
 #if defined(I_DID_EXTRA_CREDIT)
-	ret->tlb = calloc(TLB_SIZE, sizeof(TLB_ENTRY));
+	ret->tlb = (TLB_ENTRY*)calloc(TLB_SIZE, sizeof(TLB_ENTRY));
 #endif
 
 	return ret;
@@ -204,12 +212,6 @@ void print_tlb(CPU *cpu)
 /********************
  * Helper Functions *
  *******************/
-
-
-// Returns 1 if paging is enabled, 0 otherwise.
-int pagingIsEnabled(CPU *cpu) {
-    return (cpu->cr0 >> 31) & 1;
-}
 
 // Gets the base address of the next table given the table entry te.
 ADDRESS getBaseAddress(unsigned long te) {

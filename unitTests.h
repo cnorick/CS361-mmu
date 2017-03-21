@@ -6,7 +6,6 @@
 
 ADDRESS getBaseAddress(ADDRESS cur);
 int isPresent(ADDRESS cur);
-int pagingIsEnabled(CPU *cpu);
 int get7thBit(unsigned long te);
 
 
@@ -24,16 +23,6 @@ void test_isPresent() {
 }
 
 
-void test_pagingIsEnabled() {
-    CPU cpu;
-    cpu.cr0 = 0xfffffffful;
-    
-    assert(pagingIsEnabled(&cpu));
-
-    cpu.cr0 = 0x7ffffffful;
-    assert(!pagingIsEnabled(&cpu));
-}
-
 void test_get7thBit() {
     // bits are 0-based.
     unsigned long a = 0xff;
@@ -47,7 +36,6 @@ void test_get7thBit() {
 void runTests() {
     test_getBaseAddress();
     test_isPresent();
-    test_pagingIsEnabled();
     test_get7thBit();
 }
 
