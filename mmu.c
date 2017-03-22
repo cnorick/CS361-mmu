@@ -7,20 +7,30 @@
 ADDRESS getBaseAddress(ADDRESS);
 int isPresent(ADDRESS cur);
 int get7thBit(unsigned long te);
+int addTable(ADDRESS* entry, CPU *cpu);
 
 #define NULL_ADDRESS	(0ul)
 #define PHYS_MASK	(0xffful)
 #define ENTRY_MASK	(0x1fful)
 #define GB_MASK		(0x3ffffffful)
 #define MB_MASK		(0x1ffffful) //2fffful -Marz
+#define TOP (*((ADDRESS*)cpu->memory[cpu->mem_size / 2])) // Pointer to the top of the stack.
 
 void StartNewPageTable(CPU *cpu)
 {
 	//Create cr3 all the way!
 
 	//Take memory 1/2 up:
-	ADDRESS p = (ADDRESS)&cpu->memory[cpu->mem_size / 2];
-	cpu->cr3 = p + 0x1000 - (p & 0xfff);
+    //Store the pointer to the top of the stack at the first block of memory.
+    TOP = (ADDRESS)&cpu->memory[cpu->mem_size / 2];
+    TOP += 1; // Move the top of stack past the top pointer.
+
+    // Align top to a 4k boundary.
+    TOP = (ADDRESS)TOP + 0x1000 - ((ADDRESS)TOP & 0xfff);
+
+    // Bits 63-52 must be 0.
+    cpu->cr3 = NULL_ADDRESS;
+    addTable(&cpu->cr3, cpu);
 }
 
 //Write:
@@ -227,4 +237,26 @@ int isPresent(unsigned long te) {
 // Returns the 7th bit of the table entry te. Remember that the bits are 0-based.
 int get7thBit(unsigned long te) {
     return (te >> 7) & 0x1ul;
+}
+
+// Adds a new table and points to it from entry. Returns the address of the new table or 0 on failure.
+int addTable(ADDRESS* entry, CPU *cpu) {
+    ADDRESS p = TOP;
+    TOP += 512;
+    if(TOP > (ADDRESS)&cpu->memory[cpu->mem_size - 1])
+        return 0;
+
+    *entry |= p; // Sets 51-12 to p. 11-0 are all 0 because p is 4k aligned.
+    *entry |= 0x1ul; // Sets present bit 1.
+    *entry &= ~(0x1ul << 7); // Sets bit 7 to 0.
+
+
+    // Mark every entry in the new table as being not present.
+    int i;
+    ADDRESS *q = (ADDRESS*)p;
+    for(i = 0; i < 512; q++, i++) {
+        *q &= ~(0x1ul); 
+    }
+    
+    return p;
 }
