@@ -23,7 +23,7 @@ void StartNewPageTable(CPU *cpu)
 	//Take memory 1/2 up:
     //Store the pointer to the top of the stack at the first block of memory.
     TOP = (ADDRESS)&cpu->memory[cpu->mem_size / 2];
-    TOP += 1; // Move the top of stack past the top pointer.
+    TOP += 8; // Move the top of stack past the top pointer.
 
     // Align top to a 4k boundary.
     TOP = (ADDRESS)TOP + 0x1000 - ((ADDRESS)TOP & 0xfff);
@@ -57,20 +57,21 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     if(!isPresent(pml4e))
         return RET_PAGE_FAULT;
 
-    // Get pdp from pml4e. If it's entry's 7th bit is 0, go straight to physical page (These are 1Gb pages).
+
+    // Get pdp from pml4e. If it's entry's 7th bit is 1, go straight to physical page (These are 1Gb pages).
     // If it's 7th bit is 0, it's either 4Kb or 2Mb. Keep going.
     ADDRESS *pdp = (ADDRESS*)(getBaseAddress(pml4e));
     ADDRESS pdpe = *(pdp + ((virt >> 30) & ENTRY_MASK));
-    if(get7thBit(pdpe) == 0)
+    if(get7thBit(pdpe) == 1)
         return *(((ADDRESS*)getBaseAddress(pdpe)) + (virt & GB_MASK));
     if(!isPresent(pdpe))
         return RET_PAGE_FAULT;
 
-    // Get pd from pdpe. If it's entry's 7th bit is 0, go straight to physical page (These are 2Mb pages).
+    // Get pd from pdpe. If it's entry's 7th bit is 1, go straight to physical page (These are 2Mb pages).
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
     ADDRESS *pd = (ADDRESS*)getBaseAddress(pdpe);
     ADDRESS pde = *(pd + ((virt >> 21) & ENTRY_MASK));
-    if(get7thBit(pde) == 0)
+    if(get7thBit(pde) == 1)
         return *(((ADDRESS*)getBaseAddress(pde)) + (virt & MB_MASK));
     if(!isPresent(pde))
         return RET_PAGE_FAULT;
@@ -81,7 +82,8 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     ADDRESS pte = *(pt + ((virt >> 12) & ENTRY_MASK));
     if(!isPresent(pte))
         return RET_PAGE_FAULT;
-    return *(((ADDRESS*)getBaseAddress(pte)) + (virt & PHYS_MASK));
+    // Here, we're not multiplying virt&PHYS_MASE by 8 because mem_set/get is using the value as an index into the memory array.
+    return (ADDRESS)(getBaseAddress(pte)) + (virt & PHYS_MASK);
 }
 
 void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
@@ -96,6 +98,7 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
 	//Remember that I could have some 2M pages and some 4K pages with a smattering
 	//of 1G pages!
 
+    
     ADDRESS *pml4, *pdp, *pd, *pt;
     ADDRESS *pml4e, *pdpe, *pde, *pte;
 
@@ -176,8 +179,9 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
     *pte |= 0x1ul;
 
     // Bit 7 doesn't matter here.
-
+    
     return;
+    
 /*
 	ADDRESS pml4e = (virt >> 39) & ENTRY_MASK;
 	ADDRESS pdpe = (virt >> 30) & ENTRY_MASK;
@@ -318,7 +322,7 @@ int get7thBit(unsigned long te) {
 // Adds a new table and points to it from entry. Returns the address of the new table or 0 on failure.
 ADDRESS addTable(ADDRESS* entry, CPU *cpu) {
     ADDRESS p = TOP;
-    TOP += 512;
+    TOP += 4096;
     if(TOP > (ADDRESS)&cpu->memory[cpu->mem_size - 1])
         return 0;
 
@@ -327,11 +331,11 @@ ADDRESS addTable(ADDRESS* entry, CPU *cpu) {
     *entry &= ~(0x1ul << 7); // Sets bit 7 to 0.
 
 
-    // Mark every entry in the new table as being not present.
+    // Mark every entry in the new table as being not present and 7th bit as zero.
     int i;
     ADDRESS *q = (ADDRESS*)p;
     for(i = 0; i < 512; q++, i++) {
-        *q &= ~(0x1ul); 
+        *q = NULL_ADDRESS;
     }
     
     return p;
