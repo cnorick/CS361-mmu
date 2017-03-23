@@ -4,8 +4,8 @@
  * 13 Dec 2016                            *
  ******************************************/
 #include "mmu.h"
-#include "unitTests.h"
 #include <stdio.h>
+#include "unitTests.h"
 
 int main()
 {
@@ -17,15 +17,15 @@ int main()
 	cpu = new_cpu(1 << 18);
 
 	//Maps physical address 0x00004000 to
-	//virtual address 0x00001f00 using
+	//virtual address 0x00001000 using
 	//4kilobyte pages
-	map(cpu, 0x00004000, 0x00001f00, PS_4K);
+	map(cpu, 0x00004000, 0x00001000, PS_4K);
 
 	//Set the value at virtual address
 	//0x00004000 to 12345
-	mem_set(cpu, 0x00004000, 12345);
+	mem_set(cpu, 0x00004f00, 12345);
 
-	printf("Value at 0x00004000 = %d\n", mem_get(cpu, 0x00004000));
+	printf("Value at 0x00004f00 = %d\n", mem_get(cpu, 0x00004f00));
 
 	//Above should ONLY deal with physical addresses since MMU
 	//is OFF!
