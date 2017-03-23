@@ -62,19 +62,19 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     // If it's 7th bit is 0, it's either 4Kb or 2Mb. Keep going.
     ADDRESS *pdp = (ADDRESS*)(getBaseAddress(pml4e));
     ADDRESS pdpe = *(pdp + ((virt >> 30) & ENTRY_MASK));
-    if(get7thBit(pdpe) == 1)
-        return *(((ADDRESS*)getBaseAddress(pdpe)) + (virt & GB_MASK));
     if(!isPresent(pdpe))
         return RET_PAGE_FAULT;
+    if(get7thBit(pdpe) == 1)
+        return *(((ADDRESS*)getBaseAddress(pdpe)) + (virt & GB_MASK));
 
     // Get pd from pdpe. If it's entry's 7th bit is 1, go straight to physical page (These are 2Mb pages).
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
     ADDRESS *pd = (ADDRESS*)getBaseAddress(pdpe);
     ADDRESS pde = *(pd + ((virt >> 21) & ENTRY_MASK));
-    if(get7thBit(pde) == 1)
-        return *(((ADDRESS*)getBaseAddress(pde)) + (virt & MB_MASK));
     if(!isPresent(pde))
         return RET_PAGE_FAULT;
+    if(get7thBit(pde) == 1)
+        return *(((ADDRESS*)getBaseAddress(pde)) + (virt & MB_MASK));
 
     // Get pt from pde. These are 4Kb tables. Go straight to physical page from here.
     // We don't have to check the 7th bit.
