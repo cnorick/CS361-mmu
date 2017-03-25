@@ -44,6 +44,7 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
 
 	//If the MMU is off, simply return the virtual address as
 	//the physical address
+
 	if (!(cpu->cr0 & (1 << 31))) {
 		return virt;
 	}

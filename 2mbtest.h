@@ -6,29 +6,25 @@
 #include "mmu.h"
 #include <stdio.h>
 #include "unitTests.h"
-#include "2mbtest.h"
-#include "bilbzTest.h"
 
-int main()
+int test2mb()
 {
-    runTests();
-
 	CPU *cpu;
 
 	//1 << 18 is about 262,000 bytes
-	cpu = new_cpu(1 << 18);
+	cpu = new_cpu(1 << 30);
 
 	//Maps physical address 0x00004000 to
 	//virtual address 0x00001000 using
 	//4kilobyte pages
-	map(cpu, 0x00004000, 0x00001000, PS_4K);
+	map(cpu, 0x004000000, 0x01000, PS_2M);
 
 	//Set the value at virtual address
 	//0x00004000 to 12345
-	mem_set(cpu, 0x00004f00, 12345);
+	mem_set(cpu, 0x00004f00000, 12345);
 
     printf("12345 - ");
-	printf("Value at 0x00004f00 = %d\n", mem_get(cpu, 0x00004f00));
+	printf("Value at 0x00004f00000 = %d\n", mem_get(cpu, 0x00004f00));
 
 	//Above should ONLY deal with physical addresses since MMU
 	//is OFF!
@@ -38,11 +34,10 @@ int main()
 
 	//This should page fault since virtual address 0x00004000 doesn't
 	//exist
-    printf("page fault - ");
-	printf("Value at 0x00004000 = %d\n", mem_get(cpu, 0x00004000));
+    printf("Page fault - ");
+	printf("Value at 0x00004000000 = %d\n", mem_get(cpu, 0x00004000000));
 
-	//This should print 12345 since 0x00001f00 maps to physical address
-	//0x00004000 which we set to 12345 above.
+	//This should print 12345 since 0x00001f00 maps to physical address //0x00004000 which we set to 12345 above.
     printf("12345 - ");
 	printf("Value at 0x00001f00 = %d\n", mem_get(cpu, 0x00001f00));
 
@@ -55,10 +50,6 @@ int main()
 
 	//Free all resources here
 	destroy_cpu(cpu);
-    printf("-----------\n");
-    test2mb();
-    printf("-----------\n");
-    bilbz();
 
 	return 0;
 }
