@@ -198,15 +198,40 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
 
 void unmap(CPU *cpu, ADDRESS virt, PAGE_SIZE ps)
 {
+  ADDRESS *pml4, *pdp, *pd, *pt;
+  ADDRESS *pml4e, *pdpe, *pde, *pte;
+
 	//Simply set the present bit (P) to 0 of the virtual address page
 	//If the page size is 1G, set the present bit of the PDP to 0
 	//If the page size is 2M, set the present bit of the PD  to 0
 	//If the page size is 4K, set the present bit of the PT  to 0
 
-
 	if (cpu->cr3 == 0)
 		return;
 
+  pml4 = (ADDRESS*)getBaseAddress(cpu->cr3);
+  pml4e = pml4 + ((virt >> 39) & ENTRY_MASK);
+
+  pdp = (ADDRESS*)getBaseAddress(*pml4e);
+  pdpe = pdp + ((virt >> 31) & ENTRY_MASK);
+
+  if (ps == PS_1G) {
+    *pdpe &= ~0x1ul;
+    return;
+  }
+
+  pd = (ADDRESS*)getBaseAddress(*pdpe);
+  pde = pd + ((virt >> 21) & ENTRY_MASK);
+
+  if (ps == PS_2M) {
+    *pde &= ~0x0ul;
+    return;
+  }
+
+  pt = (ADDRESS*)getBaseAddress(*pde);
+  pte = pt + ((virt >> 12) & ENTRY_MASK);
+
+  *pte &= ~0x0ul;
 }
 
 
