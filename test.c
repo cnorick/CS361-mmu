@@ -8,6 +8,7 @@
 #include "unitTests.h"
 #include "2mbtest.h"
 #include "bilbzTest.h"
+#include "test4k.h"
 
 int main()
 {
@@ -59,6 +60,8 @@ int main()
     test2mb();
     printf("-----------\n");
     bilbz();
+    printf("-----------\n");
+    test4k();
 
 	return 0;
 }

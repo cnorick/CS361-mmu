@@ -66,7 +66,7 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     if(!isPresent(pdpe))
         return RET_PAGE_FAULT;
     if(get7thBit(pdpe) == 1)
-        return *(((ADDRESS*)getBaseAddress(pdpe)) + (virt & GB_MASK));
+        return (ADDRESS)getBaseAddress(pdpe) + (virt & GB_MASK);
 
     // Get pd from pdpe. If it's entry's 7th bit is 1, go straight to physical page (These are 2Mb pages).
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
@@ -75,7 +75,7 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     if(!isPresent(pde))
         return RET_PAGE_FAULT;
     if(get7thBit(pde) == 1)
-        return *(((ADDRESS*)getBaseAddress(pde)) + (virt & MB_MASK));
+        return (ADDRESS)getBaseAddress(pde) + (virt & MB_MASK);
 
     // Get pt from pde. These are 4Kb tables. Go straight to physical page from here.
     // We don't have to check the 7th bit.
@@ -207,32 +207,42 @@ void unmap(CPU *cpu, ADDRESS virt, PAGE_SIZE ps)
 	//If the page size is 2M, set the present bit of the PD  to 0
 	//If the page size is 4K, set the present bit of the PT  to 0
 
-	if (cpu->cr3 == 0)
-		return;
+  if (cpu->cr3 == 0)
+      return;
 
   pml4 = (ADDRESS*)getBaseAddress(cpu->cr3);
+
   pml4e = pml4 + ((virt >> 39) & ENTRY_MASK);
+  if (!isPresent(*pml4e))
+      return;
 
+  // If ps is 1G, the pdpe must have it's present bit set to 0.
   pdp = (ADDRESS*)getBaseAddress(*pml4e);
-  pdpe = pdp + ((virt >> 31) & ENTRY_MASK);
+  pdpe = pdp + ((virt >> 30) & ENTRY_MASK);
 
-  if (ps == PS_1G) {
-    *pdpe &= ~0x1ul;
-    return;
+  if (!isPresent(*pdpe))
+      return;
+  else if (ps == PS_1G) {
+      *pdpe &= ~0x1ul;
+      return;
   }
 
+  // If ps is 2M, the pde must have it's present bit set to 0.
   pd = (ADDRESS*)getBaseAddress(*pdpe);
   pde = pd + ((virt >> 21) & ENTRY_MASK);
 
-  if (ps == PS_2M) {
-    *pde &= ~0x0ul;
+  if (!isPresent(*pde))
+      return;
+  else if (ps == PS_2M) {
+    *pde &= ~0x1ul;
     return;
   }
 
+  // If ps is 4K, the pte must have it's present bit set to 0.
   pt = (ADDRESS*)getBaseAddress(*pde);
   pte = pt + ((virt >> 12) & ENTRY_MASK);
 
-  *pte &= ~0x0ul;
+  *pte &= ~0x1ul;
 }
 
 
