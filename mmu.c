@@ -8,6 +8,7 @@ ADDRESS getBaseAddress(ADDRESS);
 int isPresent(ADDRESS cur);
 int get7thBit(unsigned long te);
 ADDRESS addTable(ADDRESS* entry, CPU *cpu);
+void addToTLB(CPU *cpu, ADDRESS virt, ADDRESS phys);
 
 #define NULL_ADDRESS	(0ul)
 #define PHYS_MASK	(0xffful)
@@ -52,6 +53,14 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
 		return RET_PAGE_FAULT;
 	}
 
+    int i;
+    for (i = 0; i < TLB_SIZE; i++) {
+      if (cpu->tlb[i].virt == virt) {
+        cpu->tlb[i].tag++;
+        return cpu->tlb[i].phys;
+      }
+    }
+
     // We get the pml4 address from the cr3, and it's offset from the virtual address.
     ADDRESS *pml4 = (ADDRESS*)(getBaseAddress(cpu->cr3));
     ADDRESS pml4e = *(pml4 + ((virt >> 39) & ENTRY_MASK)); // Pointer arithmetic.
@@ -65,17 +74,22 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     ADDRESS pdpe = *(pdp + ((virt >> 30) & ENTRY_MASK));
     if(!isPresent(pdpe))
         return RET_PAGE_FAULT;
-    if(get7thBit(pdpe) == 1)
-        return (ADDRESS)getBaseAddress(pdpe) + (virt & GB_MASK);
-
+    if(get7thBit(pdpe) == 1) {
+        ADDRESS phys = (ADDRESS)getBaseAddress(pdpe) + (virt & GB_MASK);
+        addToTLB(cpu, virt, phys);
+        return phys;
+    }
     // Get pd from pdpe. If it's entry's 7th bit is 1, go straight to physical page (These are 2Mb pages).
     // If it's 7th bit is 0, it's either 4Kb. Keep going.
     ADDRESS *pd = (ADDRESS*)getBaseAddress(pdpe);
     ADDRESS pde = *(pd + ((virt >> 21) & ENTRY_MASK));
     if(!isPresent(pde))
         return RET_PAGE_FAULT;
-    if(get7thBit(pde) == 1)
-        return (ADDRESS)getBaseAddress(pde) + (virt & MB_MASK);
+    if(get7thBit(pde) == 1) {
+        ADDRESS phys = (ADDRESS)getBaseAddress(pde) + (virt & MB_MASK);
+        addToTLB(cpu, virt, phys);
+        return phys;
+    }
 
     // Get pt from pde. These are 4Kb tables. Go straight to physical page from here.
     // We don't have to check the 7th bit.
@@ -84,7 +98,9 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
     if(!isPresent(pte))
         return RET_PAGE_FAULT;
     // Here, we're not multiplying virt&PHYS_MASE by 8 because mem_set/get is using the value as an index into the memory array.
-    return (ADDRESS)(getBaseAddress(pte)) + (virt & PHYS_MASK);
+    ADDRESS phys = (ADDRESS)(getBaseAddress(pte)) + (virt & PHYS_MASK);
+    addToTLB(cpu, virt, phys);
+    return phys;
 }
 
 void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
@@ -245,7 +261,16 @@ void unmap(CPU *cpu, ADDRESS virt, PAGE_SIZE ps)
   *pte &= ~0x1ul;
 }
 
-
+void invlpg(CPU *cpu, ADDRESS virt) {
+  int i;
+  for (i = 0; i < TLB_SIZE; i++) {
+    if (cpu->tlb[i].virt == virt) {
+      cpu->tlb[i].virt = -1;
+      cpu->tlb[i].phys = -1;
+      cpu->tlb[i].tag = -1;
+    }
+  }
+}
 
 //////////////////////////////////////////
 //
@@ -375,4 +400,17 @@ ADDRESS addTable(ADDRESS* entry, CPU *cpu) {
     }
     
     return p;
+}
+
+void addToTLB(CPU *cpu, ADDRESS virt, ADDRESS phys) {
+  int index = 0;
+  int i;
+
+  for (i = 0; i < TLB_SIZE; i++) {
+    if (cpu->tlb[i].tag < cpu->tlb[index].tag) index = i;
+  }
+
+  cpu->tlb[index].virt = virt;
+  cpu->tlb[index].phys = phys;
+  cpu->tlb[index].tag = 1;
 }

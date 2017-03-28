@@ -7,7 +7,7 @@
 //Uncomment the following line if you're
 //doing the extra credit
 
-//#define I_DID_EXTRA_CREDIT
+#define I_DID_EXTRA_CREDIT
 
 #define REGISTER unsigned long
 #define ADDRESS unsigned long
