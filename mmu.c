@@ -250,6 +250,8 @@ void unmap(CPU *cpu, ADDRESS virt, PAGE_SIZE ps)
     if (cpu->cr3 == 0)
         return;
 
+    removeFromTLB(cpu, virt, ps);
+    
     pml4 = (ADDRESS*)getBaseAddress(cpu->cr3);
 
     pml4e = pml4 + ((virt >> 39) & ENTRY_MASK);
@@ -523,25 +525,25 @@ void free_table(ADDRESS *t, CPU *cpu) {
 }
 
 void removeFromTLB(CPU *cpu, ADDRESS virt, PAGE_SIZE ps) {
-  int i;
-  ADDRESS tlbVirt;
+    int i;
+    ADDRESS tlbVirt;
 
-  for (i = 0; i < TLB_SIZE; i++) {
-    tlbVirt = cpu->tlb[i].virt;
-    if (ps == PS_4K && (tlbVirt & PHYS_MASK) == (virt & PHYS_MASK)) {
-      cpu->tlb[i].virt = 0;
-      cpu->tlb[i].phys = 0;
-      cpu->tlb[i].tag = 0;
+    for (i = 0; i < TLB_SIZE; i++) {
+        tlbVirt = cpu->tlb[i].virt;
+        if (ps == PS_4K && ((tlbVirt & ~PHYS_MASK) == (virt & ~PHYS_MASK))) {
+            cpu->tlb[i].virt = 0;
+            cpu->tlb[i].phys = 0;
+            cpu->tlb[i].tag = 0;
+        }
+        if (ps == PS_1G && ((tlbVirt & ~GB_MASK) == (virt & ~GB_MASK))) {
+            cpu->tlb[i].virt = 0;
+            cpu->tlb[i].phys = 0;
+            cpu->tlb[i].tag = 0;
+        }
+        if (ps == PS_2M && ((tlbVirt & ~MB_MASK) == (virt & ~MB_MASK))) {
+            cpu->tlb[i].virt = 0;
+            cpu->tlb[i].phys = 0;
+            cpu->tlb[i].tag = 0;
+        }
     }
-    if (ps == PS_1G && (tlbVirt & GB_MASK) == (virt & GB_MASK)) {
-      cpu->tlb[i].virt = 0;
-      cpu->tlb[i].phys = 0;
-      cpu->tlb[i].tag = 0;
-    }
-    if (ps == PS_2M && (tlbVirt & MB_MASK) == (virt & MB_MASK)) {
-      cpu->tlb[i].virt = 0;
-      cpu->tlb[i].phys = 0;
-      cpu->tlb[i].tag = 0;
-    }
-  }
 }
