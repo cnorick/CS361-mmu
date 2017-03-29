@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include "mmu.h"
 
-int test4k(){
+void test4k(){
     CPU *cpu;
     cpu = new_cpu(1 << 20); // 
     

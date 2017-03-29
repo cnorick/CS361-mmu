@@ -9,6 +9,8 @@
 #include "2mbtest.h"
 #include "bilbzTest.h"
 #include "test4k.h"
+#include "bigTest4k.h"
+#include "bigTest2m.h"
 
 int main()
 {
@@ -62,6 +64,10 @@ int main()
     bilbz();
     printf("-----------\n");
     test4k();
+    printf("-----------\n");
+    bigTest4k();
+    printf("-----------\n");
+    bigTest2m();
 
 	return 0;
 }

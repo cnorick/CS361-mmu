@@ -36,7 +36,7 @@ void StartNewPageTable(CPU *cpu)
     // Divide up memory into 4k tables. The first entry in each table points to the next free space in memory.
     ADDRESS *t = (ADDRESS *)TOP;
     while(1) {
-        if((ADDRESS)(t + 512) < (ADDRESS)(&cpu->memory[cpu->mem_size]))
+        if((ADDRESS)(t + 1024) < (ADDRESS)(&cpu->memory[cpu->mem_size]))
             *t = (ADDRESS)(t + 512);
         else {
             *t = NULL_ADDRESS;
@@ -145,7 +145,7 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
 
     pml4e = pml4 + ((virt >> 39) & ENTRY_MASK);
     if(!isPresent(*pml4e)) {
-        if(numFreeTables(cpu) <= 3)
+        if(numFreeTables(cpu) < 3)
             return;
         pdp = (ADDRESS *)addTable(pml4e, cpu);
         if(pdp == 0) return;
@@ -171,7 +171,7 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
         return;
     }
     else if(!isPresent(*pdpe)) {
-        if(numFreeTables(cpu) <= 2)
+        if(numFreeTables(cpu) < 2)
             return;
         pd = (ADDRESS *)addTable(pdpe, cpu);
         if(pd == 0) return;
@@ -197,7 +197,7 @@ void map(CPU *cpu, ADDRESS phys, ADDRESS virt, PAGE_SIZE ps)
         return;
     }
     else if(!isPresent(*pde)) {
-        if(numFreeTables(cpu) <= 1)
+        if(numFreeTables(cpu) < 1)
             return;
         pt = (ADDRESS*)addTable(pde, cpu);
         if(pt == 0) return;
@@ -412,8 +412,9 @@ int get7thBit(unsigned long te) {
 // Adds a new table and points to it from entry. Returns the address of the new table or 0 on failure.
 ADDRESS addTable(ADDRESS* entry, CPU *cpu) {
     // If TOP is null, there is no more memory.
-    if(TOP == NULL_ADDRESS)
+    if(TOP == NULL_ADDRESS) {
         return NULL_ADDRESS;
+    }
 
     ADDRESS p = TOP;
 
