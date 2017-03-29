@@ -9,7 +9,7 @@ int isPresent(ADDRESS cur);
 int get7thBit(unsigned long te);
 ADDRESS addTable(ADDRESS* entry, CPU *cpu);
 void addToTLB(CPU *cpu, ADDRESS virt, ADDRESS phys);
-void removeFromTLB(CPU *cpu, ADDRESS virt);
+void removeFromTLB(CPU *cpu, ADDRESS virt, PAGE_SIZE ps);
 
 #define NULL_ADDRESS	(0ul)
 #define PHYS_MASK	(0xffful)
@@ -416,23 +416,23 @@ void addToTLB(CPU *cpu, ADDRESS virt, ADDRESS phys) {
   cpu->tlb[index].tag = 1;
 }
 
-void removeFromTLB(CPU *cpu, ADDRESS virt) {
+void removeFromTLB(CPU *cpu, ADDRESS virt, PAGE_SIZE ps) {
   int i;
   ADDRESS tlbVirt;
 
   for (i = 0; i < TLB_SIZE; i++) {
     tlbVirt = cpu->tlb[i].virt;
-    if ((tlbVirt & PHYS_MASK) == (virt & PHYS_MASK)) {
+    if (ps == PS_4K && (tlbVirt & PHYS_MASK) == (virt & PHYS_MASK)) {
       cpu->tlb[i].virt = 0;
       cpu->tlb[i].phys = 0;
       cpu->tlb[i].tag = 0;
     }
-    if ((tlbVirt & GB_MASK) == (virt & GB_MASK)) {
+    if (ps == PS_1G && (tlbVirt & GB_MASK) == (virt & GB_MASK)) {
       cpu->tlb[i].virt = 0;
       cpu->tlb[i].phys = 0;
       cpu->tlb[i].tag = 0;
     }
-    if ((tlbVirt & MB_MASK) == (virt & MB_MASK)) {
+    if (ps == PS_2M && (tlbVirt & MB_MASK) == (virt & MB_MASK)) {
       cpu->tlb[i].virt = 0;
       cpu->tlb[i].phys = 0;
       cpu->tlb[i].tag = 0;
