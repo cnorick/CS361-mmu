@@ -12,6 +12,7 @@ void addToTLB(CPU *cpu, ADDRESS virt, ADDRESS phys);
 int numFreeTables(CPU *cpu);
 void free_table(ADDRESS *t, CPU *cpu);
 void deallocateTables(ADDRESS *pdp, ADDRESS *pd, ADDRESS *pt, ADDRESS *pml4e, ADDRESS *pdpe, ADDRESS *pde, CPU *cpu);
+void removeFromTLB(CPU *cpu, ADDRESS virt, PAGE_SIZE ps);
 
 #define NULL_ADDRESS	(0ul)
 #define PHYS_MASK	(0xffful)
@@ -70,7 +71,7 @@ ADDRESS virt_to_phys(CPU *cpu, ADDRESS virt)
 
     int i;
     for (i = 0; i < TLB_SIZE; i++) {
-      if (cpu->tlb[i].virt == virt) {
+      if (cpu->tlb[i].virt == virt && cpu->tlb[i].tag != 0) {
         cpu->tlb[i].tag++;
         return cpu->tlb[i].phys;
       }
@@ -291,9 +292,9 @@ void invlpg(CPU *cpu, ADDRESS virt) {
     int i;
     for (i = 0; i < TLB_SIZE; i++) {
         if (cpu->tlb[i].virt == virt) {
-            cpu->tlb[i].virt = -1;
-            cpu->tlb[i].phys = -1;
-            cpu->tlb[i].tag = -1;
+            cpu->tlb[i].virt = 0;
+            cpu->tlb[i].phys = 0;
+            cpu->tlb[i].tag = 0;
         }
     }
 }
@@ -519,4 +520,28 @@ void deallocateTables(ADDRESS *pdp, ADDRESS *pd, ADDRESS *pt, ADDRESS *pml4e, AD
 void free_table(ADDRESS *t, CPU *cpu) {
     *t = TOP;
     TOP = (ADDRESS)t;
+}
+
+void removeFromTLB(CPU *cpu, ADDRESS virt, PAGE_SIZE ps) {
+  int i;
+  ADDRESS tlbVirt;
+
+  for (i = 0; i < TLB_SIZE; i++) {
+    tlbVirt = cpu->tlb[i].virt;
+    if (ps == PS_4K && (tlbVirt & PHYS_MASK) == (virt & PHYS_MASK)) {
+      cpu->tlb[i].virt = 0;
+      cpu->tlb[i].phys = 0;
+      cpu->tlb[i].tag = 0;
+    }
+    if (ps == PS_1G && (tlbVirt & GB_MASK) == (virt & GB_MASK)) {
+      cpu->tlb[i].virt = 0;
+      cpu->tlb[i].phys = 0;
+      cpu->tlb[i].tag = 0;
+    }
+    if (ps == PS_2M && (tlbVirt & MB_MASK) == (virt & MB_MASK)) {
+      cpu->tlb[i].virt = 0;
+      cpu->tlb[i].phys = 0;
+      cpu->tlb[i].tag = 0;
+    }
+  }
 }
